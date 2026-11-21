@@ -1,0 +1,7 @@
+node_modules/
+.npm-cache/
+data/
+models/*.bin
+test/*.png
+test/edge-profile*/
+test/ui-*.mjs

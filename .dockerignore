@@ -1,0 +1,11 @@
+node_modules
+.npm-cache
+.git
+.github
+data
+models
+test
+test/*.png
+*.log
+firewall-result.txt
+DEPLOY.md

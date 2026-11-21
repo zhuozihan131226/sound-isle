@@ -1,0 +1,21 @@
+{
+  "name": "Sound Isle",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "postCreateCommand": "bash scripts/setup-dev.sh",
+  "forwardPorts": [4310],
+  "portsAttributes": {
+    "4310": {
+      "label": "Sound Isle",
+      "onAutoForward": "openPreview",
+      "visibility": "public"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "remoteUser": "node"
+}

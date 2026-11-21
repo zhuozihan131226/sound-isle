@@ -1,0 +1,27 @@
+{
+  "name": "sound-isle",
+  "version": "1.0.0",
+  "description": "声屿 — 本地音频提取工作台：MP4 转 MP3，提取歌曲歌词",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js",
+    "download-model": "node scripts/download-model.js"
+  },
+  "keywords": [
+    "audio",
+    "mp3",
+    "lyrics",
+    "whisper",
+    "ffmpeg"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.3",
+    "multer": "^2.5.0",
+    "music-metadata": "^10.9.1",
+    "opencc-js": "^1.4.2"
+  }
+}

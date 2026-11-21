@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sound-isle
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
+      - key: APP_PASSWORD
+        sync: false
