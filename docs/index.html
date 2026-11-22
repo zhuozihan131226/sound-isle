@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>声屿 SOUND ISLE · 浏览器音频工作台</title>
+    <meta
+      name="description"
+      content="纯静态音频工具：在浏览器里把 MP4 转成 MP3，或从 MP3 读取内嵌歌词、匹配 LRCLIB 同步歌词。"
+    />
+    <meta name="theme-color" content="#0b0d0a" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./static.css" />
+    <script src="./vendor/jsmediatags/jsmediatags.min.js"></script>
+    <script src="./vendor/ffmpeg/ffmpeg.js"></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body data-mode="convert">
+    <div class="ambient" aria-hidden="true">
+      <span class="ambient-glow glow-a"></span>
+      <span class="ambient-glow glow-b"></span>
+      <span class="ambient-grid"></span>
+    </div>
+
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="声屿首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40" fill="none">
+            <rect x="1" y="1" width="38" height="38" rx="12" stroke="currentColor" stroke-width="1.5" />
+            <path d="M11 20v-3M16 24V14M21 27V11M26 23V16M31 21v-2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="brand-type">
+          <strong>声屿</strong>
+          <small>SOUND ISLE</small>
+        </span>
+      </a>
+
+      <nav class="mode-switch" aria-label="选择工具">
+        <button class="mode-btn is-active" type="button" data-mode="convert" role="tab" aria-selected="true" aria-controls="studio">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="2.2" y="4" width="15.6" height="12" rx="2.4" stroke="currentColor" stroke-width="1.4" />
+            <path d="m7.2 8 4.8 2.5-4.8 2.5V8Z" fill="currentColor" />
+            <path d="M5 2.5v3M10 2.5v3M15 2.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+          </svg>
+          视频转 MP3
+        </button>
+        <button class="mode-btn" type="button" data-mode="lyrics" role="tab" aria-selected="false" aria-controls="studio">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M4 4.6h12M4 9h9M4 13.4h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            <path d="M14.8 11.2v5.2m0-5.2 3-1v-2.4l-3 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          歌词提取
+        </button>
+      </nav>
+
+      <div class="local-pill">
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <span>GITHUB PAGES</span>
+        <span class="pill-sep">/</span>
+        <span class="muted">浏览器本地处理</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="intro" aria-labelledby="hero-title">
+        <div class="eyebrow">
+          <span class="eyebrow-num">01</span>
+          <span class="eyebrow-rule" aria-hidden="true"></span>
+          <span id="eyebrow-text">VIDEO → AUDIO</span>
+        </div>
+
+        <h1 id="hero-title">把画面里的<br /><span class="accent">声音</span>，留下来。</h1>
+        <p class="lede" id="hero-copy">
+          一段视频，变成一份 MP3。转换在浏览器里完成，文件不经过任何服务器。
+        </p>
+
+        <div class="feature-row" id="feature-row">
+          <div class="feature"><strong>FFMPEG.WASM</strong><span>浏览器转码</span></div>
+          <div class="feature"><strong>ID3</strong><span>读取歌曲信息</span></div>
+          <div class="feature"><strong>STATIC</strong><span>无需后端</span></div>
+        </div>
+
+        <div class="sound-object" aria-hidden="true">
+          <span class="orbit orbit-a"></span>
+          <span class="orbit orbit-b"></span>
+          <div class="disc-shadow"></div>
+          <div class="disc">
+            <span class="disc-grooves"></span>
+            <span class="disc-sheen"></span>
+            <span class="disc-label">
+              <span class="label-brand">SOUND ISLE · SIDE A</span>
+              <span class="label-main" id="disc-label">MP4<br /><i>→</i> MP3</span>
+              <span class="label-spec" id="disc-spec">BROWSER · LOCAL</span>
+            </span>
+            <span class="disc-hole"></span>
+          </div>
+          <div class="tonearm">
+            <span class="arm-pivot"></span>
+            <span class="arm-bar"></span>
+            <span class="arm-head"></span>
+          </div>
+          <span class="floating-tag tag-a">NO SERVER</span>
+          <span class="floating-tag tag-b" id="floating-tag">WASM / 192k</span>
+          <svg class="wave-line" viewBox="0 0 440 80" fill="none" preserveAspectRatio="none">
+            <path
+              d="M0 41h22l7-9 8 18 8-28 9 39 9-49 9 57 9-43 8 27 8-17 8 9 7-4h18l6-12 8 24 8-31 8 38 8-26 8 17 8-8h20l7 12 8-21 8 29 8-38 8 45 8-33 8 22 8-12h21l7-6 8 11 8-19 8 27 8-21 8 14 8-7h22"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <div class="disc-caption">
+            <span>STATIC SPIRIT</span>
+            <span>BROWSER BODY</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="studio" id="studio" aria-label="音频提取工具">
+        <div class="workbench" id="workbench">
+          <div class="paper-meta">
+            <span>STATIC SHEET / <b id="sheet-number">01</b></span>
+            <span class="paper-status" id="paper-status"><i></i> READY</span>
+          </div>
+
+          <div class="workbench-head">
+            <div>
+              <span class="step-label" id="step-label">STEP 01 · UPLOAD</span>
+              <h2 id="tool-title">上传视频</h2>
+            </div>
+            <span class="file-hint" id="file-hint">MP4 / MOV / WEBM · ≤ 120 MB</span>
+          </div>
+
+          <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="选择或拖入视频文件">
+            <input id="file-input" type="file" accept=".mp4,.mov,.mkv,.webm,.m4v,.avi" hidden />
+            <div class="dz-default" id="dz-default">
+              <span class="dz-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" fill="none">
+                  <path d="M16 5v14m0 0 5.4-5.4M16 19l-5.4-5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M6 20.5v3A3.5 3.5 0 0 0 9.5 27h13a3.5 3.5 0 0 0 3.5-3.5v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="dz-copy">
+                <strong id="dz-title">把视频拖到这里</strong>
+                <span id="dz-sub">或 <u>点击选择文件</u> · 最大 120 MB</span>
+              </span>
+              <span class="dz-formats" id="dz-formats"><span>MP4</span><span>MOV</span><span>WEBM</span></span>
+            </div>
+
+            <div class="dz-file" id="dz-file" hidden>
+              <span class="file-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M6 3.5h7.5L19 9v11.5H6V3.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                  <path d="M13.5 3.5V9H19" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                  <path d="M9.2 15.2v-2.6m2.7 4.2v-5.6m2.7 4V12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span class="file-copy">
+                <strong id="selected-name">—</strong>
+                <span id="selected-meta">—</span>
+              </span>
+              <span class="file-change">点击更换</span>
+              <button class="file-remove" id="file-remove" type="button" aria-label="移除文件">
+                <svg viewBox="0 0 20 20" fill="none"><path d="m5.5 5.5 9 9m0-9-9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="options" id="options">
+            <div class="option-block" id="bitrate-block">
+              <div class="option-label">
+                <span>输出码率</span>
+                <small>越高越清晰</small>
+              </div>
+              <div class="segmented" role="radiogroup" aria-label="输出码率">
+                <button type="button" data-bitrate="128" role="radio" aria-checked="false">128k</button>
+                <button type="button" data-bitrate="192" role="radio" aria-checked="true" class="is-active">192k</button>
+                <button type="button" data-bitrate="320" role="radio" aria-checked="false">320k</button>
+              </div>
+            </div>
+
+            <div class="option-block static-source" id="static-source-block" hidden>
+              <div class="option-label">
+                <span>歌词来源</span>
+                <small>内嵌标签 + LRCLIB</small>
+              </div>
+              <span class="static-badge">NO AI / STATIC</span>
+            </div>
+          </div>
+
+          <button class="primary-btn" id="start-btn" type="button" disabled>
+            <span id="start-label">开始提取 MP3</span>
+            <span class="btn-arrow" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none"><path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </span>
+          </button>
+
+          <div class="progress-panel" id="progress-panel" hidden aria-live="polite">
+            <div class="progress-top">
+              <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+              <div class="progress-copy">
+                <strong id="progress-stage">准备中</strong>
+                <span id="progress-detail">请保持页面开启</span>
+              </div>
+              <span class="progress-percent" id="progress-percent">0%</span>
+            </div>
+            <div class="progress-track"><span id="progress-bar"></span></div>
+            <button class="text-btn" id="reset-btn" type="button">取消并重新选择</button>
+          </div>
+
+          <div class="error-panel" id="error-panel" hidden role="alert">
+            <span class="error-icon" aria-hidden="true">!</span>
+            <div>
+              <strong>处理没有完成</strong>
+              <p id="error-message">请重试。</p>
+            </div>
+            <button class="ghost-btn" id="error-reset" type="button">重新选择</button>
+          </div>
+
+          <div class="paper-foot">
+            <span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2m-7.5 0h9v6.5h-9V7Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" /></svg> 文件只在浏览器内处理，不会上传</span>
+            <span class="paper-code">SI—<b id="paper-code">WASM</b></span>
+          </div>
+        </div>
+
+        <div class="tool-notes" id="tool-notes">
+          <div class="notes-head">
+            <span>FIELD NOTES</span>
+            <span>GITHUB PAGES / STATIC MODE</span>
+          </div>
+          <div class="notes-grid" id="notes-grid"></div>
+        </div>
+
+        <div class="result" id="result" aria-live="polite" hidden></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-left">
+        <span class="footer-mark">声屿 / SOUND ISLE</span>
+        <span class="footer-copy">把声音，从画面里取出来。</span>
+      </div>
+      <div class="footer-right">
+        <span>FFMPEG.WASM</span><i></i><span>LRCLIB</span><i></i><span>GITHUB PAGES</span>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

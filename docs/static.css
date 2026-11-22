@@ -1,0 +1,34 @@
+/* Static GitHub Pages edition additions. */
+
+.static-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 5px 8px;
+  border: 1px solid rgba(16, 18, 13, 0.16);
+  border-radius: 6px;
+  color: var(--paper-muted);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.static-source .option-label > span {
+  color: var(--ink);
+}
+
+/* Keep long GitHub Pages labels from squeezing the navigation. */
+@media (max-width: 1280px) {
+  .local-pill .muted,
+  .local-pill .pill-sep {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .static-badge {
+    font-size: 6.5px;
+  }
+}
