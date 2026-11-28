@@ -874,30 +874,56 @@ async function loadWhisperModel(onProgress) {
     return new Uint8Array(cached);
   }
 
-  const chunks = [];
-  let received = 0;
-  for (let part = 1; part <= WHISPER_MODEL_PARTS; part += 1) {
-    const url = new URL(`./models/ggml-base-q5_1.bin.part${part}`, location.href).href;
-    const response = await fetch(url, { cache: 'force-cache' });
-    if (!response.ok) throw new Error(`Whisper 模型分片 ${part} 加载失败（${response.status}）。`);
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    chunks.push(buffer);
-    received += buffer.length;
-    const percent = Math.min(70, 56 + Math.round((received / WHISPER_MODEL_BYTES) * 14));
-    onProgress(percent, `正在下载 Whisper 模型 ${Math.round((received / WHISPER_MODEL_BYTES) * 100)}%`);
-  }
+  const localModelBase = new URL('./models/', location.href).href;
+  const isLocalhost = ['127.0.0.1', 'localhost', '::1'].includes(location.hostname);
+  const repos = isLocalhost
+    ? [localModelBase]
+    : [
+        'https://cdn.jsdelivr.net/gh/zhuozihan131226/sound-isle@main/docs/models/',
+        'https://fastly.jsdelivr.net/gh/zhuozihan131226/sound-isle@main/docs/models/',
+        'https://raw.githubusercontent.com/zhuozihan131226/sound-isle/main/docs/models/',
+        localModelBase
+      ];
 
-  const model = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    model.set(chunk, offset);
-    offset += chunk.length;
+  let lastError = null;
+  for (const base of repos) {
+    try {
+      const chunks = [];
+      let received = 0;
+      for (let part = 1; part <= WHISPER_MODEL_PARTS; part += 1) {
+        const url = `${base}ggml-base-q5_1.bin.part${part}`;
+        const response = await fetch(url, {
+          cache: 'force-cache',
+          signal: AbortSignal.timeout(isLocalhost ? 120000 : 30000)
+        });
+        if (!response.ok) throw new Error(`模型分片 ${part} 加载失败（${response.status}）`);
+        const buffer = new Uint8Array(await response.arrayBuffer());
+        chunks.push(buffer);
+        received += buffer.length;
+        const percent = Math.min(70, 56 + Math.round((received / WHISPER_MODEL_BYTES) * 14));
+        onProgress(
+          percent,
+          `正在下载 Whisper 模型 ${Math.round((received / WHISPER_MODEL_BYTES) * 100)}%`
+        );
+      }
+
+      const model = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) {
+        model.set(chunk, offset);
+        offset += chunk.length;
+      }
+      if (model.length !== WHISPER_MODEL_BYTES) {
+        throw new Error('Whisper 模型文件不完整，请刷新页面重试。');
+      }
+      await cacheModel(model);
+      return model;
+    } catch (error) {
+      lastError = error;
+      onProgress(57, '当前模型镜像不可用，正在尝试下一个来源…');
+    }
   }
-  if (model.length !== WHISPER_MODEL_BYTES) {
-    throw new Error('Whisper 模型文件不完整，请刷新页面重试。');
-  }
-  await cacheModel(model);
-  return model;
+  throw lastError || new Error('Whisper 模型加载失败，请刷新页面重试。');
 }
 
 async function ensureWhisper(onProgress) {
