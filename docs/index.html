@@ -12,6 +12,7 @@
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="./static.css" />
+    <script src="./coi-serviceworker.js"></script>
     <script src="./vendor/jsmediatags/jsmediatags.min.js"></script>
     <script src="./vendor/ffmpeg/ffmpeg.js"></script>
     <script type="module" src="./app.js"></script>
@@ -73,13 +74,13 @@
 
         <h1 id="hero-title">把画面里的<br /><span class="accent">声音</span>，留下来。</h1>
         <p class="lede" id="hero-copy">
-          一段视频，变成一份 MP3。转换在浏览器里完成，文件不经过任何服务器。
+          从 MP3 读取内嵌歌词，再到 LRCLIB 匹配；还没有结果时，让本地 Whisper 听写。文件留在浏览器。
         </p>
 
         <div class="feature-row" id="feature-row">
-          <div class="feature"><strong>FFMPEG.WASM</strong><span>浏览器转码</span></div>
-          <div class="feature"><strong>ID3</strong><span>读取歌曲信息</span></div>
-          <div class="feature"><strong>STATIC</strong><span>无需后端</span></div>
+          <div class="feature"><strong>TAGS</strong><span>读取内嵌歌词</span></div>
+          <div class="feature"><strong>LRCLIB</strong><span>在线同步歌词</span></div>
+          <div class="feature"><strong>WHISPER</strong><span>浏览器本地听写</span></div>
         </div>
 
         <div class="sound-object" aria-hidden="true">
@@ -182,12 +183,33 @@
               </div>
             </div>
 
-            <div class="option-block static-source" id="static-source-block" hidden>
+            <div class="option-block" id="whisper-block" hidden>
               <div class="option-label">
-                <span>歌词来源</span>
-                <small>内嵌标签 + LRCLIB</small>
+                <span>本地 AI 听写</span>
+                <small>未命中时用 Whisper</small>
               </div>
-              <span class="static-badge">NO AI / STATIC</span>
+              <label class="switch">
+                <input id="whisper-toggle" type="checkbox" checked />
+                <span class="switch-track" aria-hidden="true"><span></span></span>
+                <span class="switch-text" id="whisper-toggle-text">开启</span>
+              </label>
+            </div>
+
+            <div class="option-block" id="whisper-language-block" hidden>
+              <div class="option-label">
+                <span>识别语言</span>
+                <small>用于 Whisper 听写</small>
+              </div>
+              <label class="select-wrap">
+                <select id="whisper-language" aria-label="Whisper 识别语言">
+                  <option value="zh">中文</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="auto">自动检测</option>
+                </select>
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </label>
             </div>
           </div>
 

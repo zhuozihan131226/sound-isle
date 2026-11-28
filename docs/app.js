@@ -1,4 +1,5 @@
 import { Converter } from './vendor/opencc/t2cn.js';
+import { WhisperWasmService, convertFromFile } from './vendor/whisper/index.es.js';
 
 const toSimplified = Converter({ from: 'tw', to: 'cn' });
 
@@ -36,11 +37,11 @@ const MODES = {
   lyrics: {
     eyebrow: 'AUDIO → LYRICS',
     hero: '让每一句<br /><span class="accent">歌词</span>，浮现。',
-    copy: '从 MP3 读取内嵌歌词，再到 LRCLIB 匹配同步时间轴。文件留在浏览器里。',
+    copy: '从 MP3 读取内嵌歌词，再到 LRCLIB 匹配；还没有结果时，让本地 Whisper 听写。文件留在浏览器。',
     features: [
       ['TAGS', '读取内嵌歌词'],
       ['LRCLIB', '在线同步歌词'],
-      ['STATIC', '无需后端']
+      ['WHISPER', '浏览器本地听写']
     ],
     title: '上传歌曲',
     step: 'STEP 02 · LYRICS',
@@ -53,14 +54,14 @@ const MODES = {
     sheet: '02',
     code: 'LYRICS',
     disc: 'MP3<br /><i>→</i> LRC',
-    spec: 'STATIC · LRCLIB',
-    tag: 'TAGS / LRCLIB',
+    spec: 'STATIC · WHISPER',
+    tag: 'TAGS / AI',
     maxBytes: 40 * 1024 * 1024,
     extensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'oga', 'opus', 'wma', 'aiff'],
     notes: [
       ['TAGS', '先读内嵌标签', '读取标题、歌手、封面，以及 USLT / SYLT 歌词。'],
       ['LRCLIB', '再匹配在线歌词', '只发送歌名、歌手和时长，不上传音频。'],
-      ['STATIC', '没有 AI 听写', '纯前端版本无法运行 Whisper，找不到时请手动补全歌名。']
+      ['WHISPER', '最后本地听写', '首次使用下载约 60 MB 模型，在浏览器内完成识别。']
     ]
   }
 };
@@ -92,7 +93,12 @@ const state = {
   variant: 'simp',
   autoScrollUntil: 0,
   coverUrl: '',
-  audioUrl: ''
+  audioUrl: '',
+  whisper: true,
+  whisperLanguage: 'zh',
+  whisperService: null,
+  whisperReady: false,
+  whisperLoading: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -124,7 +130,11 @@ const els = {
   selectedMeta: $('#selected-meta'),
   fileRemove: $('#file-remove'),
   bitrateBlock: $('#bitrate-block'),
-  staticSourceBlock: $('#static-source-block'),
+  whisperBlock: $('#whisper-block'),
+  whisperToggle: $('#whisper-toggle'),
+  whisperToggleText: $('#whisper-toggle-text'),
+  whisperLanguageBlock: $('#whisper-language-block'),
+  whisperLanguage: $('#whisper-language'),
   bitrateButtons: [...document.querySelectorAll('[data-bitrate]')],
   startBtn: $('#start-btn'),
   startLabel: $('#start-label'),
@@ -267,7 +277,8 @@ function applyMode(mode, { initial = false } = {}) {
   els.fileInput.accept = cfg.accept;
   els.dropzone.setAttribute('aria-label', `选择或拖入${cfg.title.replace('上传', '')}文件`);
   els.bitrateBlock.hidden = mode !== 'convert';
-  els.staticSourceBlock.hidden = mode !== 'lyrics';
+  els.whisperBlock.hidden = mode !== 'lyrics';
+  syncWhisperUI();
   els.notesGrid.innerHTML = cfg.notes
     .map(
       ([num, title, text], index) => `
@@ -296,6 +307,13 @@ function syncStart() {
   els.startLabel.textContent = state.busy ? '浏览器处理中…' : state.result ? '重新提取一次' : cfg.startLabel;
   els.dropzone.setAttribute('aria-disabled', String(state.busy));
   els.fileRemove.disabled = state.busy;
+}
+
+function syncWhisperUI() {
+  els.whisperToggle.checked = state.whisper;
+  els.whisperToggleText.textContent = state.whisper ? '开启' : '关闭';
+  els.whisperLanguage.value = state.whisperLanguage;
+  els.whisperLanguageBlock.hidden = state.mode !== 'lyrics' || !state.whisper;
 }
 
 function clearFileUI() {
@@ -795,8 +813,180 @@ function buildLyricsResult({ meta, duration, coverUrl, audioUrl, parsed, source,
     warning:
       source === 'lrclib'
         ? '歌词来自 LRCLIB 在线歌词库。静态版不会上传音频，只发送了歌名、歌手与时长。'
-        : ''
+        : source === 'whisper'
+          ? '这段歌词由浏览器本地 Whisper 模型听写，唱歌场景可能有错字或漏句，建议对照原曲校对。'
+          : ''
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Local Whisper (browser)                                             */
+/* ------------------------------------------------------------------ */
+
+const WHISPER_MODEL_PARTS = 4;
+const WHISPER_MODEL_BYTES = 59707625;
+
+function openModelDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('sound-isle-whisper', 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('models')) {
+        request.result.createObjectStore('models');
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readCachedModel() {
+  try {
+    const db = await openModelDB();
+    return await new Promise((resolve) => {
+      const tx = db.transaction('models', 'readonly');
+      const request = tx.objectStore('models').get('base-q5_1');
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function cacheModel(bytes) {
+  try {
+    const db = await openModelDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('models', 'readwrite');
+      tx.objectStore('models').put(bytes, 'base-q5_1');
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // Private mode / quota can prevent caching; model still works from HTTP cache.
+  }
+}
+
+async function loadWhisperModel(onProgress) {
+  const cached = await readCachedModel();
+  if (cached?.length === WHISPER_MODEL_BYTES) {
+    onProgress(70, '已从浏览器缓存读取 Whisper 模型');
+    return new Uint8Array(cached);
+  }
+
+  const chunks = [];
+  let received = 0;
+  for (let part = 1; part <= WHISPER_MODEL_PARTS; part += 1) {
+    const url = new URL(`./models/ggml-base-q5_1.bin.part${part}`, location.href).href;
+    const response = await fetch(url, { cache: 'force-cache' });
+    if (!response.ok) throw new Error(`Whisper 模型分片 ${part} 加载失败（${response.status}）。`);
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    chunks.push(buffer);
+    received += buffer.length;
+    const percent = Math.min(70, 56 + Math.round((received / WHISPER_MODEL_BYTES) * 14));
+    onProgress(percent, `正在下载 Whisper 模型 ${Math.round((received / WHISPER_MODEL_BYTES) * 100)}%`);
+  }
+
+  const model = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    model.set(chunk, offset);
+    offset += chunk.length;
+  }
+  if (model.length !== WHISPER_MODEL_BYTES) {
+    throw new Error('Whisper 模型文件不完整，请刷新页面重试。');
+  }
+  await cacheModel(model);
+  return model;
+}
+
+async function ensureWhisper(onProgress) {
+  if (state.whisperReady && state.whisperService) return state.whisperService;
+  if (state.whisperLoading) return state.whisperLoading;
+
+  state.whisperLoading = (async () => {
+    if (!window.isSecureContext) {
+      throw new Error('本地 AI 需要 HTTPS 或 localhost 环境。');
+    }
+    if (!window.crossOriginIsolated) {
+      throw new Error('本地 AI 运行环境尚未就绪，请刷新页面后再试。');
+    }
+
+    const service = state.whisperService || new WhisperWasmService({ logLevel: 2 });
+    if (!(await service.checkWasmSupport())) {
+      throw new Error('当前浏览器不支持 WebAssembly，无法运行本地 AI。');
+    }
+
+    const model = await loadWhisperModel(onProgress);
+    onProgress(72, '正在初始化本地 Whisper 引擎');
+    await service.initModel(model);
+    state.whisperService = service;
+    state.whisperReady = true;
+    return service;
+  })();
+
+  try {
+    return await state.whisperLoading;
+  } finally {
+    if (!state.whisperReady) state.whisperLoading = null;
+  }
+}
+
+async function transcribeInBrowser(file, token) {
+  if (!state.whisper) return null;
+  if (!window.crossOriginIsolated) {
+    throw new Error('本地 AI 需要跨源隔离环境。页面正在初始化，请刷新后再试。');
+  }
+
+  const service = await ensureWhisper((percent, detail) => {
+    if (token === state.runToken) setProgress('加载本地 Whisper', detail, percent);
+  });
+  if (token !== state.runToken) return null;
+
+  setProgress('解码音频', '正在准备 16 kHz 单声道音频', 74);
+  const { audioData, audioInfo } = await convertFromFile(file, { normalize: true });
+  if (!audioData?.length) throw new Error('无法从文件中解码出音频。');
+  if (token !== state.runToken) return null;
+
+  const sampleRate = audioInfo.sampleRate || 16000;
+  const chunkSize = Math.floor(sampleRate * 25);
+  const totalChunks = Math.max(1, Math.ceil(audioData.length / chunkSize));
+  const lines = [];
+
+  for (let index = 0; index < totalChunks; index += 1) {
+    if (token !== state.runToken) return null;
+    const startSample = index * chunkSize;
+    const endSample = Math.min(audioData.length, startSample + chunkSize);
+    const offset = startSample / sampleRate;
+    const percent = 78 + Math.round((index / totalChunks) * 18);
+    setProgress('Whisper 本地听写', `第 ${index + 1} / ${totalChunks} 段`, percent);
+
+    const result = await service.transcribe(
+      audioData.slice(startSample, endSample),
+      undefined,
+      {
+        language: state.whisperLanguage,
+        threads: 4,
+        translate: false
+      }
+    );
+
+    for (const segment of result.segments || []) {
+      let text = String(segment.text || '')
+        .replace(/\[(?:music|音乐|掌声|applause|blank_audio)\]/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!text || /^[\s♪]+$/.test(text)) continue;
+      const time = Math.max(0, offset + Number(segment.timeStart) / 1000);
+      const previous = lines[lines.length - 1];
+      if (previous && previous.text === text && time - previous.time < 1.2) continue;
+      lines.push({ time: Number(time.toFixed(2)), text });
+    }
+  }
+
+  if (!lines.length) throw new Error('Whisper 没有识别到清晰的人声。');
+  setProgress('整理 AI 歌词', '正在生成时间轴', 97);
+  return { lines, duration: audioInfo.duration, language: state.whisperLanguage };
 }
 
 async function runLyrics(file, token, overrides = {}) {
@@ -846,54 +1036,79 @@ async function runLyrics(file, token, overrides = {}) {
     }
   }
 
-  if (!title && !artist) {
-    finish({
-      found: false,
-      title: stripExtension(file.name),
-      artist: '',
-      reason: '没有读到歌曲信息，也不在文件名里找到可搜索的歌名。',
-      canRematch: true,
-      audioUrl: state.audioUrl,
-      coverUrl
-    });
-    return;
-  }
-
-  setProgress('搜索在线歌词库', `正在匹配「${title}」`, 38);
   const audioUrl = state.audioUrl || trackUrl(URL.createObjectURL(file));
   state.audioUrl = audioUrl;
   const duration = await getMediaDuration(audioUrl);
-  const match = await searchLrclib(meta, duration);
-  if (token !== state.runToken) return;
 
-  if (match) {
-    setProgress('整理歌词', '正在生成时间轴与简体版本', 86);
-    const parsed = parseLrc(match.syncedLyrics || match.plainLyrics || '');
-    if (parsed.lines.length) {
-      const result = buildLyricsResult({
-        meta,
-        duration,
-        coverUrl,
-        audioUrl,
-        parsed,
-        source: 'lrclib',
-        sourceLabel: 'LRCLIB 歌词库',
-        display: { title: match.title, artist: match.artist, album: match.album }
-      });
-      finish(result);
-      return;
+  if (title || artist) {
+    setProgress('搜索在线歌词库', `正在匹配「${title || artist}」`, 38);
+    const match = await searchLrclib(meta, duration);
+    if (token !== state.runToken) return;
+
+    if (match) {
+      setProgress('整理歌词', '正在生成时间轴与简体版本', 86);
+      const parsed = parseLrc(match.syncedLyrics || match.plainLyrics || '');
+      if (parsed.lines.length) {
+        const result = buildLyricsResult({
+          meta,
+          duration,
+          coverUrl,
+          audioUrl,
+          parsed,
+          source: 'lrclib',
+          sourceLabel: 'LRCLIB 歌词库',
+          display: { title: match.title, artist: match.artist, album: match.album }
+        });
+        finish(result);
+        return;
+      }
+    }
+  }
+
+  let aiError = '';
+  if (state.whisper) {
+    try {
+      const asr = await transcribeInBrowser(file, token);
+      if (token !== state.runToken) return;
+      if (asr?.lines?.length) {
+        const parsed = {
+          synced: true,
+          lines: asr.lines,
+          plainText: asr.lines.map((line) => line.text).join('\n'),
+          meta: {}
+        };
+        const result = buildLyricsResult({
+          meta,
+          duration: asr.duration || duration,
+          coverUrl,
+          audioUrl,
+          parsed,
+          source: 'whisper',
+          sourceLabel: '本地 Whisper 听写',
+          display: { title, artist, album }
+        });
+        finish(result);
+        return;
+      }
+      aiError = 'Whisper 没有识别到清晰的人声。';
+    } catch (error) {
+      aiError = error.message || '本地 AI 听写失败。';
     }
   }
 
   finish({
     found: false,
-    title,
+    title: title || stripExtension(file.name),
     artist,
     album,
     duration,
     coverUrl,
     audioUrl,
-    reason: '内嵌标签和 LRCLIB 都没有找到匹配歌词。静态版不包含本地 AI 听写，可以补全歌名或歌手后重试。',
+    reason: aiError
+      ? `内嵌标签和 LRCLIB 都没有找到匹配歌词，本地 AI 听写也没有完成：${aiError}`
+      : state.whisper
+        ? '内嵌标签和 LRCLIB 都没有找到匹配歌词，Whisper 没有识别到清晰的人声。'
+        : '内嵌标签和 LRCLIB 都没有找到匹配歌词。本地 AI 听写已关闭，可以开启后重试。',
     canRematch: true
   });
 }
@@ -1035,10 +1250,14 @@ function lyricsResultMarkup(result) {
         compact: true
       })}
 
-      <div class="warning-strip">
+      ${
+        result.warning
+          ? `<div class="warning-strip">
         <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3 18 17H2L10 3Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M10 8v4.2M10 14.6v.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-        <span>静态版歌词来自内嵌标签与 LRCLIB，不包含本地 AI 听写；点击歌词可以跳转到对应时间。</span>
-      </div>
+        <span>${escapeHtml(result.warning)}</span>
+      </div>`
+          : ''
+      }
 
       <div class="lyrics-toolbar">
         ${
@@ -1087,7 +1306,7 @@ function missResultMarkup(result) {
                 )}" maxlength="120" aria-label="歌手" /></label>
                 <button class="rematch-submit" type="submit">重新匹配</button>
               </div>
-              <p class="miss-tip">静态版没有 AI 听写；如果这是冷门歌曲，可能需要在有后端的版本中处理。</p>
+              <p class="miss-tip">静态版已尝试内嵌标签、LRCLIB 和本地 Whisper。如果仍然失败，可能是纯音乐或歌声识别困难；可以补全歌名、歌手后重试。</p>
             </form>`
           : ''
       }
@@ -1471,6 +1690,14 @@ function bindEvents() {
         item.setAttribute('aria-checked', String(active));
       });
     });
+  });
+
+  els.whisperToggle.addEventListener('change', () => {
+    state.whisper = els.whisperToggle.checked;
+    syncWhisperUI();
+  });
+  els.whisperLanguage.addEventListener('change', () => {
+    state.whisperLanguage = els.whisperLanguage.value;
   });
 
   els.startBtn.addEventListener('click', startJob);
